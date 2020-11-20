@@ -1,0 +1,46 @@
+image: artifactory.verizon.com/jdk8-gradle5-node10:latest
+
+variables:
+  gitclone: git clone "$CI_REPO_URL"; cd "$CI_PROJECT_NAME" ; git checkout -B $CI_COMMIT_REF_NAME $CI_COMMUT_SHA; ls -la
+  artifactory: artifactory.com
+  imagename: $artifactory/test-service:0.1-$CI_PIPELINE_ID
+  reqmount: -v /usr/local/bin/kubectl:/usr/local/bin/kubectl -v /usr/local/bin/helm:/usr/local/bin/helm: -v /usr/local/bin/docker:/usr/local/bin/docker -v /var/run/docker.sock:/var/run/docker.sock -v /etc/kubernetes/plugins:/etc/kubernetes/plugins/
+  twistlock: -u root --rm -i -v /var/run/docker.sock:/var/run/docker.sock artifactory.com/twistcli:0.1.1 -u https://twistlock.verizon.com
+  nonprodcluster: https://myk8s-np-aws-us-east-1-green.kube-np.<domainname>
+  helmname: test-service
+  helmfolder: ./helm/temp-service
+  namespace: dev-test
+  values: ./helm/temp-service/values_env.yaml
+  
+stages;
+  - build
+  - upload
+  - deploy
+    
+build:
+  stage: build
+  only:
+    - develop
+  script:
+    - gradle build
+    - ls -ls ./build/libs
+    - docker build -t $imagename .
+    
+upload:
+  stage: upload
+  only: 
+    - develop
+  script:
+    - docker login -u $artifactory -u $USER -p $PASSWORD
+    - docker push $imagename
+    
+deploy:
+  stage: deploy
+  only:
+    - develop
+  image:
+    name: artifactory.verizon.com/jdk8-gradle5-node10:latest
+    entrypoint: ["/bin/sh", "-c"]
+  script:
+      - docker run $reqmount -v $mount_name:/builds -w /build/$CI_PROJECT_NAME --entrypoint=/bin/sh $logging -c "$gitclone; kubectl plugin login -U $nonprodcluster -u $USER -p $PASSWORD -R admin -e nonprod; export TILLER_NAMESPACE=$appid-system; helm upgrade --force --install --debug $helmfolder --namespace $namespace -f=$values --set deployment.template.containers[0].image=$imagename,global.build.env=dev,global.build.branch=develop "
+      
