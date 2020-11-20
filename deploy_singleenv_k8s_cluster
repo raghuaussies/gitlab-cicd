@@ -11,6 +11,7 @@ variables:
   helmfolder: ./helm/temp-service
   namespace: dev-test
   values: ./helm/temp-service/values_env.yaml
+  applid: ring
   
 stages;
   - build
